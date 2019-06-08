@@ -329,3 +329,4 @@ ex_wr:
 ex_rd:
   MsgBox "Произошла ошибка, повторите снова!" & vbCrLf & Err.Description, vbInformation, "ВНИМАНИЕ"
 End Sub
+'/ -------------------------------- Fin
