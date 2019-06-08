@@ -8,9 +8,9 @@ Attribute VB_Creatable = True
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 
-'/ --------------------------------
+// --------------------------------
 '/ Форма ККМ (ФР Штрих-М)
-'/ --------------------------------
+'/ --------------------------------/
 Option Compare Database
 Option Explicit
 
