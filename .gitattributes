@@ -2,7 +2,8 @@
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
-*.cls     diff=csharp
+*.cs     diff=csharp
+*.cls    diff=java
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
