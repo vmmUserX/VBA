@@ -9,7 +9,9 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 
 '/ --------------------------------
+'/ vmm, 2018
 '/ Форма ККМ (ФР Штрих-М)
+'/
 '/ --------------------------------
 Option Compare Database
 Option Explicit
