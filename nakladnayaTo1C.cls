@@ -9,7 +9,7 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 
 '/ -----------------------------------------------------------
-'/ vmm, 2017
+'/ vmm, 2018
 '/ Форма NakladnayaTo1C
 '/
 '/ Вставка накладной из корпоративной системы предприятия в 1С 
@@ -29,6 +29,7 @@ Private Sub Add_Click()
   Dim selSkl As Object
   Dim selNom As Object
   Dim selVusn As Object
+  Dim valAvans As Object
   Dim selEI As Object
   Dim PLAccBU As Object
   Dim PLAccNDS As Object
@@ -48,12 +49,17 @@ Private Sub Add_Click()
   Dim selDocPTR As Object
   Dim DataNewDoc As Date
   Dim DataNewGds As Date
-  Dim N, sel, discount, sek
+  Dim N, sel, Discount, sek
   Dim pr As Double
   
-  'On Error Resume Next
-  If rez.METADATA.Name = "БухгалтерияПредприятия" Then N = 0
-  If Err = 0 Then
+  On Error Resume Next
+  'If rez.METADATA.Name = "БухгалтерияПредприятия" Then N = 0
+  If Err = 0 And Not rez Is Nothing Then
+     If rez.TransactionActive = True Then
+        MsgBox "Блокировка базы данных, принять накладную в данный момент невозможно.", vbInformation, "ВНИМАНИЕ"
+        rez.RollbackTransaction
+        Exit Sub
+     End If
      On Error GoTo ex_rd
      Me.Add.ForeColor = 255
      If IsNull(Me.Nomer) Or Me.Nomer = "" Or IsNull(Me.DataNakl) Or Me.DataNakl = "" Then MsgBox "Нет номера накладной!", vbInformation, "ВНИМАНИЕ": Exit Sub
@@ -63,7 +69,7 @@ Private Sub Add_Click()
      If Me.NomDoc = "" And Me.DataDoc = "" Then MsgBox "Номер или дату входного документа поставщика!", vbInformation, "ВНИМАНИЕ": Exit Sub
      DataNewDoc = Me!DataNakl
      DataNewGds = Me!DataDoc
-     discount = 1.534    '(SelTypPriceR.ПроцентСкидкиНаценки + 100) / 100
+     If IsNull(Me!Наценка) Then Discount = 1.59 Else Discount = CDbl(Me!Наценка) 'SelTypPriceR.ПроцентСкидкиНаценки + 100) / 100
      If rez.Документы.ПоступлениеТоваровУслуг.НайтиПоРеквизиту("НомерВходящегоДокумента", CStr(Me!NomDoc)).Контрагент.Наименование = CStr(Me!Delivery) Then
         MsgBox "Номер " & CStr(Me!NomDoc) & " входного документа от поставщика " & CStr(Me!Delivery) & " уже существует в базе 1С !", vbInformation, "ВНИМАНИЕ"
         Exit Sub
@@ -91,18 +97,17 @@ Private Sub Add_Click()
         'If Me.contract = "" Or IsNull(Me.contract) Then
         '   If MsgBox("Нет номера договора у этого поставщика, продолжить?", vbYesNo, "ВНИМАНИЕ") = vbNo Then GoTo ex_ex_rd
         'Else
-        Set selDog = rez.Справочники.ДоговорыКонтрагентов.НайтиПоКоду(CStr(Me.contract), , , selClient)
+        Set selDog = rez.Справочники.ДоговорыКонтрагентов.НайтиПоКоду(CStr(Me.Contract), , , selClient)
         If selDog.Пустая() Then MsgBox "Нет номера договора у этого поставщика!", vbInformation, "ВНИМАНИЕ": Exit Sub
         'End If
         Set PLAccBU = rez.ПланыСчетов.Хозрасчетный.НайтиПоКоду("41.01")
         Set PLAccNDS = rez.ПланыСчетов.Хозрасчетный.НайтиПоКоду("19.03")
         Set SelTypPriceZ = rez.Справочники.ТипыЦенНоменклатуры.НайтиПоНаименованию("закупочная")
         Set SelTypPriceR = rez.Справочники.ТипыЦенНоменклатуры.НайтиПоНаименованию("розничная")
-        '/ -----------------------------------------------------------                                             
         '/ Перечисления
-        '/ -----------------------------------------------------------                                              
         Set valVidOper = rez.Перечисления.ВидыОперацийПоступлениеТоваровУслуг.ПокупкаКомиссия
         Set valNDS = rez.Перечисления.СтавкиНДС.НДС18
+        Set valAvans = rez.Перечисления.СпособыЗачетаАвансов.НеЗачитывать
         'Set selVusn = rez.Перечисления.ОтражениеВУСН.Принимаются
         '/ СОЗДАНИЕ ДОКУМЕНТА
         Set refs = rez.Документы.ПоступлениеТоваровУслуг
@@ -113,7 +118,8 @@ Private Sub Add_Click()
            'If selDoc.Товары.Количество() = 0 Then
            'Else
            'End If
-           MsgBox "В 1Снакладная поставщика с номером " & CStr(Me!Nomer) & " уже существует!"
+           rez.RollbackTransaction
+           MsgBox "В 1С:Зудилин К.Н. накладная поставщика с номером " & CStr(Me!Nomer) & " уже существует!"
            GoTo ex_ex_wr
         Else
            Set newDoc = refs.CreateDocument()
@@ -121,8 +127,9 @@ Private Sub Add_Click()
            newDoc.Дата = DataNewDoc            'Me!DataNakl
            newDoc.Организация = rez.Справочники.Организации.НайтиПоНаименованию(CStr(Me.Organization))
            newDoc.Контрагент = selClient
+           newDoc.СпособЗачетаАвансов = valAvans
            'newDoc.Сделка = selAcc             ' Счет на оплату поставщика
-           If Me!НУ = True Then newDoc.ОтражатьВНалоговомУчете = True Else newDoc.ОтражатьВНалоговомУчете = False
+           'If Me!НУ = True Then newDoc.ОтражатьВНалоговомУчете = True Else newDoc.ОтражатьВНалоговомУчете = False
            newDoc.Склад = selSkl               '"Основной склад"
            newDoc.ВидОперации = valVidOper     '"Покупка, комиссия"
            If (Not selDog.Пустая()) And (Not selDog.ПометкаУдаления) And (Not selDog.ВалютаВзаиморасчетов.Пустая()) Then
@@ -131,28 +138,31 @@ Private Sub Add_Click()
               newDoc.КратностьВзаиморасчетов = 1
               newDoc.КурсВзаиморасчетов = 1
            Else
-              MsgBox "Либо нет номера договора, либо стоит пометка удаления на этой накладной!" & CStr(rst!Код), vbInformation, "ВНИМАНИЕ"
-              GoTo ex_ex_wr:
+              rez.RollbackTransaction
+              MsgBox "Либо нет номера договора, либо стоит пометка удаления на этой накладной!", vbInformation, "ВНИМАНИЕ"
+              GoTo ex_ex_wr
            End If
            'newDoc.Комментарий = "Выгрузка накладной из основной базы"
            '/ Вкладка Учета расчетов
            newDoc.СчетУчетаРасчетовСКонтрагентом = rez.ПланыСчетов.Хозрасчетный.НайтиПоКоду("60.01")
            newDoc.СчетУчетаРасчетовПоАвансам = rez.ПланыСчетов.Хозрасчетный.НайтиПоКоду("60.02")
            '/ Вкладка Дополнительно
-           'newDoc.Грузоотправитель = selClient
-           'newDoc.Ответственный = Admin   '"Администратор"
+           newDoc.Грузоотправитель = selClient
+           newDoc.Ответственный = Admin   '"Администратор"
            newDoc.НомерВходящегоДокумента = CStr(Me!NomDoc)
            newDoc.ДатаВходящегоДокумента = DataNewGds
-           '/------------------------------------------------------------
+           '------------------------------------------------------------
            '/ Ссылки на документы
-           '/  Установка цен номенклатуры
-           '/------------------------------------------------------------
+           '/ Установка цен номенклатуры
+           '/ -----------------------------------------------------------                                                         
            newDoc.СуммаВключаетНДС = False
-           newDoc.УчитыватьНДС = True
+           newDoc.УдалитьУчитыватьНДС = False
            newDoc.НДСВключенВСтоимость = False
-           newDoc.РегистрироватьЦеныПоставщика = True
+           'newDoc.РегистрироватьЦеныПоставщика = True
            newDoc.ТипЦен = SelTypPriceZ
+           '/ -----------------------------------------------------------                                                         
            '/  Создание закупочной цены
+           '/ -----------------------------------------------------------                                                         
            If Me.flPrice = True Then
               Set DocPriceZ = rez.Документы.УстановкаЦенНоменклатуры.СоздатьДокумент()
               DocPriceZ.Дата = DataNewDoc
@@ -160,7 +170,9 @@ Private Sub Add_Click()
               DocPriceZ.НеПроводитьНулевыеЗначения = True
               DocPriceZ.Информация = "Закупочная"
               DocPriceZ.ТипЦен = SelTypPriceZ
+              '/ -----------------------------------------------------------                                                          
               '/  Создание розничной цены
+              '/ -----------------------------------------------------------                                                          
               Set DocPriceR = rez.Документы.УстановкаЦенНоменклатуры.СоздатьДокумент()
               DocPriceR.Дата = DataNewDoc
               'DocPriceR.Ответственный = Admin
@@ -169,31 +181,36 @@ Private Sub Add_Click()
               DocPriceR.ТипЦен = SelTypPriceR
            End If
            'DocPrice.Комментарий = ""
-           '/------------------------------------------------------------                                                             
+           '/ -----------------------------------------------------------                                                             
            '/ Вкладка Товар
-           '/------------------------------------------------------------                                                             
+           '/ -----------------------------------------------------------                                                             
            Set rst = CurrentDb.OpenRecordset("SELECT * FROM ПодчинПТУ_Z ORDER BY N")
            If rst.RecordCount = 0 Then
+              rez.RollbackTransaction
               MsgBox "В справочнике Номенклатура не найден код " & CStr(rst!Код), vbInformation, "ВНИМАНИЕ"
-              GoTo ex_ex_wr:
+              GoTo ex_ex_wr
            Else
-              '/------------------------------------------------------------                                                              
+              '/ -----------------------------------------------------------                                                              
               '/ Добавить Товары
-              '/------------------------------------------------------------                                                              
+             '/ -----------------------------------------------------------                                                               
               Do While Not rst.EOF
                  Set selNom = rez.Справочники.Номенклатура.НайтиПоКоду(CStr(rst!Код))
                  If selNom.Пустая() Then
                     '/ Новая создается во время редактирования накладной
+                    rez.RollbackTransaction
                     MsgBox "В справочнике Номенклатура не найден код " & CStr(rst!Код), vbInformation, "ВНИМАНИЕ"
-                    GoTo ex_ex_wr:
+                    GoTo ex_ex_wr
                  Else
                     Set newNom = selNom.ПолучитьОбъект()
                     'If newNom.ПометкаУдаления Then
                     '   newNom.ПометкаУдаления = False
                     '   newNom.Записать
                     'End If
+                    '/ -----------------------------------------------------------
+                    '/  Добавить                                                               
+                    '/ -----------------------------------------------------------                                                                
                     Set newGoods = newDoc.Товары.Добавить()
-                    newGoods.Номенклатура = newNom.Ссылка  '.Номенклатура
+                    newGoods.Номенклатура = newNom.ссылка  '.Номенклатура
                     newGoods.Количество = CLng(rst!Количество)
                     newGoods.СтавкаНДС = valNDS
                     newGoods.ЕдиницаИзмерения = selEI   'newNom.ЕдиницаХраненияОстатков
@@ -206,8 +223,9 @@ Private Sub Add_Click()
                        newGoods.Сумма = Format(rst!Цена * rst!Количество, "0.00")
                     End If
                     newGoods.СуммаНДС = Format(rst!СуммаНДС, "0.00")
-                    newGoods.СчетУчетаБУ = PLAccBU
+                    newGoods.СчетУчета = PLAccBU
                     newGoods.СчетУчетаНДС = PLAccNDS
+                    
                     'newGoods.ОтражениеВУСН = selVusn
                     If rst!ГТД = "" Or IsNull(rst!ГТД) Then
                     Else
@@ -219,30 +237,34 @@ Private Sub Add_Click()
                        Else
                           Set sek = sek.ПолучитьОбъект()
                        End If
-                       newGoods.НомерГТД = sek.Ссылка
+                       newGoods.НомерГТД = sek.ссылка
                     End If
                     If rst!Страна = "" Or IsNull(rst!Страна) Then
                     Else
-                      newGoods.СтранаПроисхождения = rez.Справочники.КлассификаторСтранМира.НайтиПоНаименованию(CStr(rst!Страна)).Ссылка 'Nz(CStr(rst!Страна))
+                      newGoods.СтранаПроисхождения = rez.Справочники.СтраныМира.НайтиПоНаименованию(CStr(rst!Страна)).ссылка 'Nz(CStr(rst!Страна))
                     End If
                     If Me.flPrice = True Then
+                       '/ -----------------------------------------------------------                                                                       
                        '/ Цена закупочная
+                       '/ -----------------------------------------------------------                                                                       
                        Set LinesPriceZ = DocPriceZ.Товары.Добавить()
-                       LinesPriceZ.Номенклатура = newNom.Ссылка
+                       LinesPriceZ.Номенклатура = newNom.ссылка
                        LinesPriceZ.Валюта = selVal
                        If Me.flCorrect = False Then
                           LinesPriceZ.Цена = Format((rst!Всего / rst!Количество) - rst!СуммаНДС, "0.00")
                        Else
                           LinesPriceZ.Цена = Format(rst!Цена, "0.00")
                        End If
+                       '/ -----------------------------------------------------------                                                                         
                        '/ Цена розничная
+                       '/ -----------------------------------------------------------                                                                         
                        Set LinesPriceR = DocPriceR.Товары.Добавить()
-                       LinesPriceR.Номенклатура = newNom.Ссылка
+                       LinesPriceR.Номенклатура = newNom.ссылка
                        LinesPriceR.Валюта = selVal
                        If Me.flCorrect = False Then
-                          pr = Format(rst!Всего / rst!Количество * discount, "0.00")
+                          pr = Format(rst!Всего / rst!Количество * Discount, "0.00")
                        Else
-                          pr = Format((rst!Цена * discount), "0.00")
+                          pr = Format((rst!Цена * Discount), "0.00")
                        End If
                        LinesPriceR.Цена = Round((Format(pr, "0") + 4) / 10) * 10
                     End If
@@ -250,31 +272,45 @@ Private Sub Add_Click()
                  rst.MoveNext
               Loop
            End If
-           '/------------------------------------------------------------                                                             
-           '/ Проведение документа в 1С
-           '/------------------------------------------------------------
-           'On Error GoTo 0
+           '/
            'DocPrice.Записать (rez.РежимПроведенияДокумента.Неоперативный)
+           '/ -----------------------------------------------------------
+           '/  Записать
+           '/ -----------------------------------------------------------                                                                               
            If Me.flPrice = True Then
-              On Error Resume Next
-              DocPriceZ.Записать (rez.РежимЗаписиДокумента.Запись)
-              DocPriceZ.Записать (rez.РежимЗаписиДокумента.Проведение)
-              DocPriceR.Записать (rez.РежимЗаписиДокумента.Запись)
-              DocPriceR.Записать (rez.РежимЗаписиДокумента.Проведение)
-              If Err <> 0 Then
-                 MsgBox "Проведите накладную другим числом !", vbInformation, "ВНИМАНИЕ"
-                 GoTo ex_wr:
-              End If
+             'If DocPriceZ.ПроверитьЗаполнение Then
+                 On Error Resume Next
+                 If rez.ПараметрыСеанса.ВыполняетсяОбновлениеИБ = False Then Debug.Print Err
+                 If Err <> 0 Then rez.ПараметрыСеанса.ВыполняетсяОбновлениеИБ = False: Err.Clear
+                 If rez.ПараметрыСеанса.ПропуститьПроверкуЗапретаИзменения = False Then Debug.Print Err
+                 If Err <> 0 Then rez.ПараметрыСеанса.ПропуститьПроверкуЗапретаИзменения = False: Err.Clear
+                 On Error GoTo ex_wr
+                 DocPriceZ.Записать (rez.РежимЗаписиДокумента.Запись)
+                 DocPriceZ.Записать (rez.РежимЗаписиДокумента.Проведение)
+                 DocPriceR.Записать (rez.РежимЗаписиДокумента.Запись)
+                 DocPriceR.Записать (rez.РежимЗаписиДокумента.Проведение)
+                 If Err <> 0 Then
+                    MsgBox "Проведите накладную другим числом !", vbInformation, "ВНИМАНИЕ"
+                    GoTo ex_wr
+                 End If
+              'Else
+              '   GoTo ex_wr
+              'End If
            End If
            On Error GoTo ex_wr
            newDoc.Записать (rez.РежимЗаписиДокумента.Запись)
            'newDoc.Записать (rez.РежимЗаписиДокумента.Проведение)
            rez.CommitTransaction
-           MsgBox "Накладная № " & Me!Nomer & " добавлена в 1С ", vbInformation, "ВНИМАНИЕ"
+           MsgBox "Накладная № " & Me!Nomer & " добавлена в 1С !", vbInformation, "ВНИМАНИЕ"
         End If
      End If
   Else
      MsgBox "Подключитесь к 1С !", vbInformation, "ВНИМАНИЕ"
+     'If Err <> 0 Then
+     ' MsgBox "Подключитесь к 1С !", vbInformation, "ВНИМАНИЕ"
+     'ElseIf rez.TransactionActive = True Then
+     '   MsgBox "Вы не одни в базе, принять накладную в данный момент невозможно,", vbInformation, "ВНИМАНИЕ"
+     'End If
      Exit Sub
   End If
 ex_ex_wr:
@@ -313,8 +349,8 @@ ex_ex_wr:
 ex_ex_rd:
   Exit Sub
 '/ -----------------------------------------------------------
-'/ Ошибка                                                                                                                                              
-'/ -----------------------------------------------------------                                                                                                                                              
+'/ Ошибка
+'/ -----------------------------------------------------------                                                                                                                                                      
 ex_wr:
   Set refs = Nothing
   Set newSel = Nothing
@@ -346,6 +382,6 @@ ex_wr:
   Set selEI = Nothing
   rez.RollbackTransaction
 ex_rd:
-  MsgBox "Произошла ошибка, повторите операцию!" & vbCrLf & Err.Description, vbInformation, "ВНИМАНИЕ"
+  MsgBox "Произошла ошибка, повторите операцию !" & vbCrLf & Err.Description, vbInformation, "ВНИМАНИЕ"
 End Sub
 '/ -------------------------------- Fin
