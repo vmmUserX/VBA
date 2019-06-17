@@ -3,7 +3,7 @@
 ### kkm.cls:
 
 <p align="center">
-<img src="https://user-images.githubusercontent.com/40513889/59629473-9501ab00-914b-11e9-836f-3877bccbe8a8.png" />
+<img src="https://user-images.githubusercontent.com/40513889/59629473-9501ab00-914b-11e9-836f-3877bccbe8a8.png" title="KKM"/>
 </p>
 
 - Интеграция с 1С бухгалтерия, Фискального Регистратора (ФР - Штрих-М) по N 54-ФЗ с информационной системой компании.
